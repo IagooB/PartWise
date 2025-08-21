@@ -1,26 +1,36 @@
 -- ========================================
 -- BASE DE DATOS DE BANDAS MODULARES Y TRANSPORTADORAS
--- Versión 2.0 - Estructura Completa
+-- Versión 2.0 - Estructura Completa - PostgreSQL
 -- ========================================
 
 -- Eliminar tablas si existen (en orden inverso por las claves foráneas)
-DROP TABLE IF EXISTS equivalencias_productos;
-DROP TABLE IF EXISTS historial_precios;
-DROP TABLE IF EXISTS inventario;
-DROP TABLE IF EXISTS productos_proveedores;
-DROP TABLE IF EXISTS productos;
-DROP TABLE IF EXISTS subcategorias;
-DROP TABLE IF EXISTS categorias;
-DROP TABLE IF EXISTS contactos_proveedores;
-DROP TABLE IF EXISTS proveedores;
-DROP TABLE IF EXISTS distribuidores;
-DROP TABLE IF EXISTS fabricantes;
+DROP TABLE IF EXISTS equivalencias_productos CASCADE;
+DROP TABLE IF EXISTS historial_precios CASCADE;
+DROP TABLE IF EXISTS inventario CASCADE;
+DROP TABLE IF EXISTS productos_proveedores CASCADE;
+DROP TABLE IF EXISTS productos CASCADE;
+DROP TABLE IF EXISTS subcategorias CASCADE;
+DROP TABLE IF EXISTS categorias CASCADE;
+DROP TABLE IF EXISTS contactos_proveedores CASCADE;
+DROP TABLE IF EXISTS proveedores CASCADE;
+DROP TABLE IF EXISTS distribuidores CASCADE;
+DROP TABLE IF EXISTS fabricantes CASCADE;
+
+-- Eliminar vistas si existen
+DROP VIEW IF EXISTS v_productos_completo CASCADE;
+DROP VIEW IF EXISTS v_equivalencias_marcas CASCADE;
+DROP VIEW IF EXISTS v_productos_inventario CASCADE;
+DROP VIEW IF EXISTS v_productos_por_paso CASCADE;
+
+-- Eliminar funciones si existen
+DROP FUNCTION IF EXISTS sp_buscar_equivalentes(VARCHAR) CASCADE;
+DROP FUNCTION IF EXISTS sp_actualizar_precio(INT, INT, DECIMAL, VARCHAR, VARCHAR) CASCADE;
 
 -- ========================================
 -- 1. TABLA DE FABRICANTES
 -- ========================================
 CREATE TABLE fabricantes (
-    id_fabricante INT PRIMARY KEY AUTO_INCREMENT,
+    id_fabricante SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL UNIQUE,
     pais VARCHAR(50),
     sitio_web VARCHAR(255),
@@ -34,7 +44,7 @@ CREATE TABLE fabricantes (
 -- 2. TABLA DE DISTRIBUIDORES
 -- ========================================
 CREATE TABLE distribuidores (
-    id_distribuidor INT PRIMARY KEY AUTO_INCREMENT,
+    id_distribuidor SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
     pais VARCHAR(50),
     region VARCHAR(100),
@@ -51,13 +61,13 @@ CREATE TABLE distribuidores (
 -- 3. TABLA DE PROVEEDORES (Relación Fabricante-Distribuidor)
 -- ========================================
 CREATE TABLE proveedores (
-    id_proveedor INT PRIMARY KEY AUTO_INCREMENT,
-    id_fabricante INT,
-    id_distribuidor INT,
+    id_proveedor SERIAL PRIMARY KEY,
+    id_fabricante INTEGER,
+    id_distribuidor INTEGER,
     codigo_proveedor VARCHAR(50),
     nombre_comercial VARCHAR(100),
     condiciones_pago VARCHAR(100),
-    tiempo_entrega_dias INT,
+    tiempo_entrega_dias INTEGER,
     descuento_general DECIMAL(5,2),
     notas TEXT,
     fecha_inicio DATE,
@@ -71,8 +81,8 @@ CREATE TABLE proveedores (
 -- 4. TABLA DE CONTACTOS DE PROVEEDORES
 -- ========================================
 CREATE TABLE contactos_proveedores (
-    id_contacto INT PRIMARY KEY AUTO_INCREMENT,
-    id_proveedor INT,
+    id_contacto SERIAL PRIMARY KEY,
+    id_proveedor INTEGER,
     nombre VARCHAR(100),
     cargo VARCHAR(100),
     telefono VARCHAR(50),
@@ -87,7 +97,7 @@ CREATE TABLE contactos_proveedores (
 -- 5. TABLA DE CATEGORÍAS
 -- ========================================
 CREATE TABLE categorias (
-    id_categoria INT PRIMARY KEY AUTO_INCREMENT,
+    id_categoria SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
     descripcion TEXT,
     activo BOOLEAN DEFAULT TRUE
@@ -97,8 +107,8 @@ CREATE TABLE categorias (
 -- 6. TABLA DE SUBCATEGORÍAS
 -- ========================================
 CREATE TABLE subcategorias (
-    id_subcategoria INT PRIMARY KEY AUTO_INCREMENT,
-    id_categoria INT,
+    id_subcategoria SERIAL PRIMARY KEY,
+    id_categoria INTEGER,
     nombre VARCHAR(100) NOT NULL,
     descripcion TEXT,
     activo BOOLEAN DEFAULT TRUE,
@@ -109,9 +119,9 @@ CREATE TABLE subcategorias (
 -- 7. TABLA DE PRODUCTOS (Estructura ampliada)
 -- ========================================
 CREATE TABLE productos (
-    id_producto INT PRIMARY KEY AUTO_INCREMENT,
-    id_fabricante INT,
-    id_subcategoria INT,
+    id_producto SERIAL PRIMARY KEY,
+    id_fabricante INTEGER,
+    id_subcategoria INTEGER,
 
     -- Identificación básica
     codigo_producto VARCHAR(100) NOT NULL,
@@ -203,31 +213,33 @@ CREATE TABLE productos (
     notas TEXT,
 
     -- Control
-    stock_minimo INT DEFAULT 0,
+    stock_minimo INTEGER DEFAULT 0,
     unidad_medida VARCHAR(20) DEFAULT 'metro',
     multiplo_venta DECIMAL(10,2) DEFAULT 1,
-    lead_time_dias INT,
+    lead_time_dias INTEGER,
     obsoleto BOOLEAN DEFAULT FALSE,
     fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     activo BOOLEAN DEFAULT TRUE,
 
     FOREIGN KEY (id_fabricante) REFERENCES fabricantes(id_fabricante),
-    FOREIGN KEY (id_subcategoria) REFERENCES subcategorias(id_subcategoria),
-    INDEX idx_codigo (codigo_producto),
-    INDEX idx_fabricante (id_fabricante),
-    INDEX idx_tipo (tipo),
-    INDEX idx_serie (serie),
-    INDEX idx_paso (paso_mm)
+    FOREIGN KEY (id_subcategoria) REFERENCES subcategorias(id_subcategoria)
 );
+
+-- Crear índices para productos
+CREATE INDEX idx_productos_codigo ON productos(codigo_producto);
+CREATE INDEX idx_productos_fabricante ON productos(id_fabricante);
+CREATE INDEX idx_productos_tipo ON productos(tipo);
+CREATE INDEX idx_productos_serie ON productos(serie);
+CREATE INDEX idx_productos_paso ON productos(paso_mm);
 
 -- ========================================
 -- 8. TABLA DE PRODUCTOS-PROVEEDORES
 -- ========================================
 CREATE TABLE productos_proveedores (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    id_producto INT,
-    id_proveedor INT,
+    id SERIAL PRIMARY KEY,
+    id_producto INTEGER,
+    id_proveedor INTEGER,
     codigo_proveedor VARCHAR(100),
     precio_lista DECIMAL(12,2),
     descuento DECIMAL(5,2),
@@ -235,21 +247,22 @@ CREATE TABLE productos_proveedores (
     moneda VARCHAR(3) DEFAULT 'EUR',
     cantidad_minima DECIMAL(10,2),
     multiplo_pedido DECIMAL(10,2),
-    tiempo_entrega_dias INT,
+    tiempo_entrega_dias INTEGER,
     fecha_precio DATE,
     vigente BOOLEAN DEFAULT TRUE,
     notas TEXT,
     FOREIGN KEY (id_producto) REFERENCES productos(id_producto),
-    FOREIGN KEY (id_proveedor) REFERENCES proveedores(id_proveedor),
-    INDEX idx_producto_proveedor (id_producto, id_proveedor)
+    FOREIGN KEY (id_proveedor) REFERENCES proveedores(id_proveedor)
 );
+
+CREATE INDEX idx_producto_proveedor ON productos_proveedores(id_producto, id_proveedor);
 
 -- ========================================
 -- 9. TABLA DE INVENTARIO
 -- ========================================
 CREATE TABLE inventario (
-    id_inventario INT PRIMARY KEY AUTO_INCREMENT,
-    id_producto INT,
+    id_inventario SERIAL PRIMARY KEY,
+    id_producto INTEGER,
     almacen VARCHAR(50) DEFAULT 'Principal',
     ubicacion VARCHAR(50),
     cantidad_disponible DECIMAL(12,2) DEFAULT 0,
@@ -258,17 +271,18 @@ CREATE TABLE inventario (
     fecha_ultimo_movimiento TIMESTAMP,
     fecha_ultimo_inventario DATE,
     notas TEXT,
-    FOREIGN KEY (id_producto) REFERENCES productos(id_producto),
-    INDEX idx_producto_almacen (id_producto, almacen)
+    FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
 );
+
+CREATE INDEX idx_inventario_producto_almacen ON inventario(id_producto, almacen);
 
 -- ========================================
 -- 10. TABLA DE HISTORIAL DE PRECIOS
 -- ========================================
 CREATE TABLE historial_precios (
-    id_historial INT PRIMARY KEY AUTO_INCREMENT,
-    id_producto INT,
-    id_proveedor INT,
+    id_historial SERIAL PRIMARY KEY,
+    id_producto INTEGER,
+    id_proveedor INTEGER,
     precio_anterior DECIMAL(12,2),
     precio_nuevo DECIMAL(12,2),
     porcentaje_cambio DECIMAL(6,2),
@@ -282,18 +296,38 @@ CREATE TABLE historial_precios (
 -- ========================================
 -- 11. TABLA DE EQUIVALENCIAS DE PRODUCTOS
 -- ========================================
+-- Crear tipo ENUM para tipo_equivalencia
+CREATE TYPE tipo_equivalencia_enum AS ENUM ('exacta', 'similar', 'alternativa');
+
 CREATE TABLE equivalencias_productos (
-    id_equivalencia INT PRIMARY KEY AUTO_INCREMENT,
-    id_producto_principal INT,
-    id_producto_equivalente INT,
-    tipo_equivalencia ENUM('exacta', 'similar', 'alternativa') DEFAULT 'similar',
-    porcentaje_compatibilidad INT,
+    id_equivalencia SERIAL PRIMARY KEY,
+    id_producto_principal INTEGER,
+    id_producto_equivalente INTEGER,
+    tipo_equivalencia tipo_equivalencia_enum DEFAULT 'similar',
+    porcentaje_compatibilidad INTEGER,
     notas TEXT,
     verificado BOOLEAN DEFAULT FALSE,
     fecha_verificacion DATE,
     FOREIGN KEY (id_producto_principal) REFERENCES productos(id_producto),
     FOREIGN KEY (id_producto_equivalente) REFERENCES productos(id_producto)
 );
+
+-- ========================================
+-- FUNCIÓN PARA ACTUALIZAR FECHA_ACTUALIZACION
+-- ========================================
+CREATE OR REPLACE FUNCTION actualizar_fecha_actualizacion()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.fecha_actualizacion = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger para actualizar fecha_actualizacion en productos
+CREATE TRIGGER trigger_productos_fecha_actualizacion
+    BEFORE UPDATE ON productos
+    FOR EACH ROW
+    EXECUTE FUNCTION actualizar_fecha_actualizacion();
 
 -- ========================================
 -- INSERCIÓN DE DATOS INICIALES
@@ -308,7 +342,7 @@ INSERT INTO fabricantes (nombre, pais, sitio_web) VALUES
 ('Chiorino', 'Italia', 'https://www.chiorino.com'),
 ('Intralox', 'Estados Unidos', 'https://www.intralox.com'),
 ('EUROBELT', 'España', 'https://www.eurobelt.es'),
-('HONG\'S BELT', 'China', 'https://www.hongsbelt.com'),
+('HONG''S BELT', 'China', 'https://www.hongsbelt.com'),
 ('Modutech', 'España', 'https://www.modutech.es'),
 ('Scanbelt', 'Dinamarca', 'https://www.scanbelt.com'),
 ('Mafdel', 'Francia', 'https://www.mafdel.com'),
@@ -387,12 +421,12 @@ INSERT INTO productos (
 INSERT INTO productos (
     id_fabricante, id_subcategoria, codigo_producto, nombre, serie, paso_mm
 ) VALUES
-(8, 6, 'HS-100A', 'Hong\'s Belt HS-100A', 'HS-100', 50.8),
-(8, 4, 'HS-200A', 'Hong\'s Belt HS-200A', 'HS-200', 25.4),
-(8, 4, 'HS-500A-N', 'Hong\'s Belt HS-500A-N', 'HS-500', 25.4),
-(8, 4, 'HS-600B', 'Hong\'s Belt HS-600B', 'HS-600', 25.4),
-(8, 6, 'HS-800-1C', 'Hong\'s Belt HS-800-1C', 'HS-800', 50.8),
-(8, 5, 'HS-6800', 'Hong\'s Belt Serie HS-6800', 'HS-6800', 38.1);
+(8, 6, 'HS-100A', 'Hong''s Belt HS-100A', 'HS-100', 50.8),
+(8, 4, 'HS-200A', 'Hong''s Belt HS-200A', 'HS-200', 25.4),
+(8, 4, 'HS-500A-N', 'Hong''s Belt HS-500A-N', 'HS-500', 25.4),
+(8, 4, 'HS-600B', 'Hong''s Belt HS-600B', 'HS-600', 25.4),
+(8, 6, 'HS-800-1C', 'Hong''s Belt HS-800-1C', 'HS-800', 50.8),
+(8, 5, 'HS-6800', 'Hong''s Belt Serie HS-6800', 'HS-6800', 38.1);
 
 -- Insertar equivalencias Modutech
 INSERT INTO productos (
@@ -404,11 +438,11 @@ INSERT INTO productos (
 
 -- Insertar relaciones de proveedores
 INSERT INTO proveedores (id_fabricante, id_distribuidor, nombre_comercial) VALUES
-(2, 1, 'Uni Chains - Jhernando'),
-(8, 2, 'Hong\'s Belt - Campodron'),
-(12, 3, 'Esbelt - Fredriksons'),
-(4, 4, 'Habasit - Rodavigo'),
-(5, 4, 'Chiorino - Rodavigo');
+(2, 1, 'Uni Chains'),
+(8, 2, 'Hong'),
+(12, 3, 'Esbelt '),
+(4, 4, 'Habasit'),
+(5, 4, 'Chiorino');
 
 -- ========================================
 -- VISTAS ÚTILES
@@ -432,13 +466,16 @@ SELECT
     p.area_abierta_mm,
     p.material_base,
     CASE
-        WHEN p.material_PE THEN 'PE ' ELSE ''
+        WHEN p.material_PE THEN 'PE '
+        ELSE ''
     END ||
     CASE
-        WHEN p.material_PP THEN 'PP ' ELSE ''
+        WHEN p.material_PP THEN 'PP '
+        ELSE ''
     END ||
     CASE
-        WHEN p.material_POM THEN 'POM ' ELSE ''
+        WHEN p.material_POM THEN 'POM '
+        ELSE ''
     END AS materiales_disponibles,
     p.tirador_correa_PE,
     p.tirador_correa_PP,
@@ -502,8 +539,8 @@ SELECT
     p.paso_mm,
     p.paso_nominal,
     COUNT(*) AS cantidad_productos,
-    GROUP_CONCAT(DISTINCT f.nombre) AS fabricantes,
-    GROUP_CONCAT(DISTINCT p.superficie_correa) AS tipos_superficie
+    STRING_AGG(DISTINCT f.nombre, ', ') AS fabricantes,
+    STRING_AGG(DISTINCT p.superficie_correa, ', ') AS tipos_superficie
 FROM productos p
 LEFT JOIN fabricantes f ON p.id_fabricante = f.id_fabricante
 WHERE p.paso_mm IS NOT NULL
@@ -511,29 +548,32 @@ GROUP BY p.paso_mm, p.paso_nominal
 ORDER BY p.paso_mm;
 
 -- ========================================
--- PROCEDIMIENTOS ALMACENADOS
+-- FUNCIONES (PROCEDIMIENTOS ALMACENADOS EN POSTGRESQL)
 -- ========================================
 
-DELIMITER //
-
--- Procedimiento para buscar productos equivalentes
-CREATE PROCEDURE sp_buscar_equivalentes(
-    IN p_codigo_producto VARCHAR(100)
-)
+-- Función para buscar productos equivalentes
+CREATE OR REPLACE FUNCTION sp_buscar_equivalentes(p_codigo_producto VARCHAR(100))
+RETURNS TABLE(
+    codigo_producto VARCHAR(100),
+    nombre VARCHAR(255),
+    fabricante VARCHAR(100),
+    tipo_relacion VARCHAR(50)
+) AS $$
 BEGIN
+    RETURN QUERY
     SELECT
         p2.codigo_producto,
         p2.nombre,
         f.nombre AS fabricante,
-        'Código cruzado' AS tipo_relacion
+        'Código cruzado'::VARCHAR(50) AS tipo_relacion
     FROM productos p1
     JOIN productos p2 ON (
-        p1.codigo_habasit = p2.codigo_habasit OR
-        p1.codigo_intralox = p2.codigo_intralox OR
-        p1.codigo_unichain = p2.codigo_unichain OR
-        p1.codigo_scanbelt = p2.codigo_scanbelt OR
-        p1.codigo_forbo = p2.codigo_forbo OR
-        p1.codigo_modutech = p2.codigo_modutech
+        (p1.codigo_habasit IS NOT NULL AND p1.codigo_habasit = p2.codigo_habasit) OR
+        (p1.codigo_intralox IS NOT NULL AND p1.codigo_intralox = p2.codigo_intralox) OR
+        (p1.codigo_unichain IS NOT NULL AND p1.codigo_unichain = p2.codigo_unichain) OR
+        (p1.codigo_scanbelt IS NOT NULL AND p1.codigo_scanbelt = p2.codigo_scanbelt) OR
+        (p1.codigo_forbo IS NOT NULL AND p1.codigo_forbo = p2.codigo_forbo) OR
+        (p1.codigo_modutech IS NOT NULL AND p1.codigo_modutech = p2.codigo_modutech)
     )
     JOIN fabricantes f ON p2.id_fabricante = f.id_fabricante
     WHERE p1.codigo_producto = p_codigo_producto
@@ -545,26 +585,28 @@ BEGIN
         p2.codigo_producto,
         p2.nombre,
         f.nombre AS fabricante,
-        ep.tipo_equivalencia AS tipo_relacion
+        ep.tipo_equivalencia::VARCHAR(50) AS tipo_relacion
     FROM productos p1
     JOIN equivalencias_productos ep ON p1.id_producto = ep.id_producto_principal
     JOIN productos p2 ON ep.id_producto_equivalente = p2.id_producto
     JOIN fabricantes f ON p2.id_fabricante = f.id_fabricante
     WHERE p1.codigo_producto = p_codigo_producto;
-END//
+END;
+$$ LANGUAGE plpgsql;
 
--- Procedimiento para actualizar precio con historial
-CREATE PROCEDURE sp_actualizar_precio(
-    IN p_id_producto INT,
-    IN p_id_proveedor INT,
-    IN p_precio_nuevo DECIMAL(12,2),
-    IN p_usuario VARCHAR(50),
-    IN p_motivo VARCHAR(200)
+-- Función para actualizar precio con historial
+CREATE OR REPLACE FUNCTION sp_actualizar_precio(
+    p_id_producto INTEGER,
+    p_id_proveedor INTEGER,
+    p_precio_nuevo DECIMAL(12,2),
+    p_usuario VARCHAR(50),
+    p_motivo VARCHAR(200)
 )
+RETURNS VOID AS $$
+DECLARE
+    v_precio_anterior DECIMAL(12,2);
+    v_porcentaje_cambio DECIMAL(6,2);
 BEGIN
-    DECLARE v_precio_anterior DECIMAL(12,2);
-    DECLARE v_porcentaje_cambio DECIMAL(6,2);
-
     -- Obtener precio anterior
     SELECT precio_neto INTO v_precio_anterior
     FROM productos_proveedores
@@ -575,9 +617,9 @@ BEGIN
 
     -- Calcular porcentaje de cambio
     IF v_precio_anterior IS NOT NULL AND v_precio_anterior > 0 THEN
-        SET v_porcentaje_cambio = ((p_precio_nuevo - v_precio_anterior) / v_precio_anterior) * 100;
+        v_porcentaje_cambio := ((p_precio_nuevo - v_precio_anterior) / v_precio_anterior) * 100;
     ELSE
-        SET v_porcentaje_cambio = 0;
+        v_porcentaje_cambio := 0;
     END IF;
 
     -- Insertar en historial
@@ -592,13 +634,12 @@ BEGIN
     -- Actualizar precio actual
     UPDATE productos_proveedores
     SET precio_neto = p_precio_nuevo,
-        fecha_precio = CURDATE()
+        fecha_precio = CURRENT_DATE
     WHERE id_producto = p_id_producto
       AND id_proveedor = p_id_proveedor
       AND vigente = TRUE;
-END//
-
-DELIMITER ;
+END;
+$$ LANGUAGE plpgsql;
 
 -- ========================================
 -- ÍNDICES ADICIONALES PARA OPTIMIZACIÓN
@@ -616,13 +657,10 @@ CREATE INDEX idx_precios_fecha ON historial_precios(fecha_cambio);
 -- COMENTARIOS DE TABLAS
 -- ========================================
 
-ALTER TABLE fabricantes COMMENT = 'Catálogo de fabricantes de bandas modulares y transportadoras';
-ALTER TABLE distribuidores COMMENT = 'Distribuidores oficiales por región';
-ALTER TABLE productos COMMENT = 'Catálogo completo de productos con especificaciones técnicas extendidas';
-ALTER TABLE equivalencias_productos COMMENT = 'Tabla de equivalencias y compatibilidades entre productos';
-ALTER TABLE inventario COMMENT = 'Control de inventario por almacén y ubicación';
-ALTER TABLE historial_precios COMMENT = 'Registro histórico de cambios de precios';
+COMMENT ON TABLE fabricantes IS 'Catálogo de fabricantes de bandas modulares y transportadoras';
+COMMENT ON TABLE distribuidores IS 'Distribuidores oficiales por región';
+COMMENT ON TABLE productos IS 'Catálogo completo de productos con especificaciones técnicas extendidas';
+COMMENT ON TABLE equivalencias_productos IS 'Tabla de equivalencias y compatibilidades entre productos';
+COMMENT ON TABLE inventario IS 'Control de inventario por almacén y ubicación';
+COMMENT ON TABLE historial_precios IS 'Registro histórico de cambios de precios';
 
--- ========================================
--- FIN DEL SCRIPT
--- ========================================
