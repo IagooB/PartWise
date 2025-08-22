@@ -4,7 +4,7 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     # Database
-    DATABASE_URL: str = "postgresql://usuario:password@localhost/banda_transportadora_db"
+    DATABASE_URL: str = "postgresql://usuario:password@localhost/db_belts"
 
     # App
     APP_NAME: str = "Sistema de Gestión de Piezas"
